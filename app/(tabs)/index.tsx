@@ -20,7 +20,7 @@ import { colours, radii } from '@/src/theme';
 import type { Commission, Notification } from '@/src/types';
 
 export default function HomeScreen() {
-  const { token, user, warning } = useSession();
+  const { token, user } = useSession();
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [error, setError] = useState('');
@@ -71,15 +71,6 @@ export default function HomeScreen() {
           </View>
           <Avatar name={user?.displayName ?? 'Ruffl'} />
         </View>
-        {warning ? (
-          <Card tone="coral">
-            <View style={styles.row}>
-              <Ionicons color={colours.danger} name="warning-outline" size={22} />
-              <Text style={[textStyles.label, styles.flex]}>A message from Ruffl support</Text>
-            </View>
-            <Text style={textStyles.body}>{warning}</Text>
-          </Card>
-        ) : null}
         {error ? <ErrorNotice message={error} /> : null}
         <Card tone="moss">
           <View style={styles.heroTop}>

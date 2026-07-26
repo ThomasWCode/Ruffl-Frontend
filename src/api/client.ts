@@ -145,4 +145,10 @@ export const api = {
     ),
   notifications: (token: string) =>
     request<{ notifications: Notification[] }>('/notifications', {}, token),
+  readWarning: (token: string, warningId: string) =>
+    request<{ warning: { id: string; message: string; read: boolean } }>(
+      `/warnings/${warningId}/read`,
+      { method: 'POST', body: JSON.stringify({}) },
+      token,
+    ),
 };
