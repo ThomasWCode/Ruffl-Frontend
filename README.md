@@ -9,6 +9,7 @@ This guide assumes you have not used React Native, Expo, or a mobile emulator be
 - **React Native** lets the project build Android and iOS interfaces from one codebase.
 - **Expo** supplies the development server and mobile tooling around React Native.
 - **Expo Go** is a phone app that can open Ruffl during early development without creating an app-store build.
+- **Expo development builds** contain Ruffl's own native libraries, including Sentry, and are the recommended production-like test path.
 - **Expo Router** turns files under `app/` into screens and navigation routes.
 - **TypeScript** is JavaScript with additional checks that catch many mistakes before the app runs.
 - **npm** downloads the libraries listed in `package.json` and runs the commands under `scripts`.
@@ -26,6 +27,7 @@ Ruffl-Frontend/
 |-- src/theme.ts         Colours and shared visual values
 |-- test/                Automated tests
 |-- app.json             Expo application configuration
+|-- eas.json             Development, preview, and production cloud-build profiles
 |-- .env.example         Example local settings
 `-- package.json         Libraries and development commands
 ```
@@ -75,6 +77,16 @@ The `.env` file is ignored by Git. Do not commit it.
 ## Configure the backend address
 
 Open `.env` and set `EXPO_PUBLIC_API_URL`.
+
+The complete local file is:
+
+```dotenv
+EXPO_PUBLIC_API_URL=http://localhost:3000
+EXPO_PUBLIC_SENTRY_DSN=
+EXPO_PUBLIC_SENTRY_ENVIRONMENT=development
+```
+
+`EXPO_PUBLIC_*` values are compiled into the app and are not secret. Never put a Sentry auth token, database password, R2 secret, JWT secret, or Expo access token in them.
 
 ### Physical phone
 
@@ -179,6 +191,7 @@ If `.env` changes, stop Expo with `Ctrl+C` and start it again. A normal hot relo
 | `npm run android` | Starts Expo and attempts to open an Android emulator/device |
 | `npm run ios` | Starts Expo and attempts to open the iOS Simulator |
 | `npm run web` | Runs the web-compatible version for quick layout checks |
+| `npm run export:web` | Creates a production static web bundle in `dist` |
 | `npm run typecheck` | Checks TypeScript without creating a build |
 | `npm run lint` | Checks code style and common programming mistakes |
 | `npm test` | Runs the automated tests once |
@@ -192,6 +205,7 @@ Run these before committing:
 npm run typecheck
 npm run lint
 npm test
+npm run export:web
 ```
 
 The mobile tests cover calculations, progress display, API errors, rate-limit messages, and account restriction propagation. Backend permissions and commission lifecycle tests live in `Ruffl-Backend`.
@@ -219,8 +233,11 @@ The interface update is not literally instantaneous. Its normal maximum delay is
 - Shipping and receipt confirmation
 - Reviews and dispute entry points
 - Commission, direct, dispute, and support conversation types
+- Direct “message maker” and “contact Ruffl support” actions with polling conversation screens
+- Activity notifications that can be acknowledged as read
 - Maker price and payout calculator
 - Warning, suspension, and deletion handling
+- Sentry JavaScript/native crash reporting when a mobile project DSN is configured
 
 No real payment is taken. Every payment-related action is symbolic.
 
@@ -287,19 +304,16 @@ Use `npx expo install <package-name>` for Expo-native packages because Expo choo
 
 ## Expo Go versus a development build
 
-Expo Go is the easiest first development environment, but it only contains a fixed set of native libraries. A **development build** is a custom version of the Ruffl app containing its own native libraries. Use development builds before adding full native push notifications, monitoring, or app-store testing.
+Expo Go is useful for quick JavaScript/layout checks, but it contains a fixed native runtime and only supports the current Expo Go SDK. Ruffl is currently on supported Expo SDK 54, while the newest SDK is 57. Expo recommends incremental one-version-at-a-time upgrades and development builds for production apps. SDK 54 continues receiving critical fixes until the next Expo SDK release, expected in September or October 2026.
 
-Install the development client:
-
-```powershell
-npx expo install expo-dev-client
-```
-
-Configure Expo Application Services:
+`expo-dev-client` and `eas.json` are already installed/configured. Link the repository to your Expo account once:
 
 ```powershell
-npx eas-cli@latest build:configure
+npx eas-cli@latest login
+npx eas-cli@latest init
 ```
+
+`eas init` adds the real Expo project ID to app configuration. Review that change before committing it.
 
 Create development builds:
 
@@ -310,12 +324,24 @@ npx eas-cli@latest build --profile development --platform ios
 
 EAS requires an Expo account. Apple Developer and Google Play accounts are required for store distribution.
 
+Create preview and production builds only after configuring EAS environment variables:
+
+```powershell
+npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_API_URL --value https://backend.ruffl.thomaswhite.me
+npx eas-cli@latest env:create --environment production --name EXPO_PUBLIC_API_URL --value https://backend.ruffl.thomaswhite.me
+npx eas-cli@latest build --profile preview --platform android
+npx eas-cli@latest build --profile production --platform all
+```
+
+Create a separate Sentry React Native project first, then add its DSN as `EXPO_PUBLIC_SENTRY_DSN` in preview/production. Configure `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` as protected EAS build secrets for source-map upload; those three are not `EXPO_PUBLIC_*` values.
+
 ## Security and current limitations
 
 - Authentication tokens are stored through Expo SecureStore.
 - Never place private server keys in `EXPO_PUBLIC_*` variables. Anything beginning with `EXPO_PUBLIC_` is included in the client application.
-- Media selection/upload UI, Expo Push registration, and Sentry initialisation still require production service integration.
-- The backend currently stores development data in memory, so restarting it resets accounts and commissions.
+- Media selection/upload UI and Expo Push registration still require production integration. Backend R2 upload signing is implemented.
+- Sentry is initialized, but the `ruffl-frontend` Sentry project/DSN and protected source-map credentials still need to be created.
+- Production backend data uses PostgreSQL. Local development without `DATABASE_URL` intentionally uses memory and resets on restart.
 - No payment processor is integrated.
 
-As of 26 July 2026, `npm audit --omit=dev` reports high-severity advisories in transitive Expo/React Native build-tool dependencies (`brace-expansion` and `postcss`) with no compatible fix published for the SDK 54 dependency tree. Do not run `npm audit fix --force` blindly because that can move native packages outside Expo's supported versions.
+As of 29 July 2026, npm still reports high-severity advisories in transitive Expo/React Native tooling (`brace-expansion` and `postcss`) with no compatible fix in the SDK 54 tree, plus an indirect `uuid` advisory. Do not run `npm audit fix --force` blindly because that can move native packages outside Expo's supported versions. Recheck after each Expo patch and perform the SDK 54 → 55 → 56 → 57 upgrade incrementally in a dedicated change with native development builds on both platforms.

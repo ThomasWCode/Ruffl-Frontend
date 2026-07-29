@@ -41,6 +41,8 @@ export default function MessageScreen() {
 
   useEffect(() => {
     void load();
+    const interval = setInterval(() => void load(), 3_000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const send = async () => {

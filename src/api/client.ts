@@ -8,7 +8,11 @@ import type {
   User,
 } from '../types';
 
-const apiUrl = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL;
+if (!configuredApiUrl && process.env.NODE_ENV === 'production') {
+  throw new Error('EXPO_PUBLIC_API_URL is required in production builds.');
+}
+const apiUrl = (configuredApiUrl ?? 'http://localhost:3000').replace(/\/$/, '');
 let accountRestrictionHandler: ((error: ApiError) => void) | null = null;
 
 export class ApiError extends Error {
@@ -135,6 +139,18 @@ export const api = {
     ),
   conversations: (token: string) =>
     request<{ conversations: Conversation[] }>('/conversations', {}, token),
+  directConversation: (token: string, participantId: string) =>
+    request<{ conversation: Conversation }>(
+      '/conversations/direct',
+      { method: 'POST', body: JSON.stringify({ participantId }) },
+      token,
+    ),
+  supportConversation: (token: string) =>
+    request<{ conversation: Conversation }>(
+      '/support/conversation',
+      { method: 'POST', body: JSON.stringify({}) },
+      token,
+    ),
   messages: (token: string, conversationId: string) =>
     request<{ messages: Message[] }>(`/conversations/${conversationId}/messages`, {}, token),
   sendMessage: (token: string, conversationId: string, text: string) =>
@@ -145,6 +161,12 @@ export const api = {
     ),
   notifications: (token: string) =>
     request<{ notifications: Notification[] }>('/notifications', {}, token),
+  readNotification: (token: string, notificationId: string) =>
+    request<{ notification: Notification }>(
+      `/notifications/${notificationId}/read`,
+      { method: 'POST', body: JSON.stringify({}) },
+      token,
+    ),
   readWarning: (token: string, warningId: string) =>
     request<{ warning: { id: string; message: string; read: boolean } }>(
       `/warnings/${warningId}/read`,

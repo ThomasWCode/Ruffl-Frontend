@@ -23,6 +23,8 @@ export interface User {
   suspensionReason?: string;
 }
 
+export type MarketplaceUser = Omit<User, 'email'>;
+
 export interface MakerProfile {
   userId: string;
   bio: string;
@@ -38,7 +40,7 @@ export interface MakerProfile {
 }
 
 export interface MakerResult {
-  user: User;
+  user: MarketplaceUser;
   profile: MakerProfile;
   rating: number | null;
   completedCount: number;
@@ -124,6 +126,7 @@ export interface Message {
   conversationId: string;
   senderId: string;
   text: string;
+  attachments: { url: string; name: string; contentType: string }[];
   createdAt: string;
 }
 

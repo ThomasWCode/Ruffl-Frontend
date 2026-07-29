@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { api, ApiError } from '@/src/api/client';
 import {
   Avatar,
   Button,
   Card,
+  ErrorNotice,
   Eyebrow,
   Pill,
   Screen,
@@ -16,8 +19,24 @@ import { useSession } from '@/src/context/session';
 import { colours } from '@/src/theme';
 
 export default function ProfileScreen() {
-  const { signOut, user } = useSession();
+  const { signOut, token, user } = useSession();
+  const [supportError, setSupportError] = useState('');
+  const [openingSupport, setOpeningSupport] = useState(false);
   if (!user) return null;
+
+  const openSupport = async () => {
+    if (!token) return;
+    setOpeningSupport(true);
+    try {
+      const { conversation } = await api.supportConversation(token);
+      setSupportError('');
+      router.push({ pathname: '/messages/[id]', params: { id: conversation.id } });
+    } catch (caught) {
+      setSupportError(caught instanceof ApiError ? caught.message : 'Could not contact support.');
+    } finally {
+      setOpeningSupport(false);
+    }
+  };
 
   return (
     <Screen>
@@ -54,6 +73,7 @@ export default function ProfileScreen() {
         </>
       ) : null}
       <Text style={styles.section}>Trust and safety</Text>
+      {supportError ? <ErrorNotice message={supportError} /> : null}
       <Card>
         <View style={styles.row}>
           <Ionicons color={colours.moss} name="shield-checkmark-outline" size={22} />
@@ -63,6 +83,12 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Card>
+      <Button
+        disabled={openingSupport}
+        label={openingSupport ? 'Opening support…' : 'Contact Ruffl support'}
+        onPress={() => void openSupport()}
+        variant="secondary"
+      />
       <Card tone="coral">
         <Text style={textStyles.label}>Payments are simulated</Text>
         <Text style={textStyles.muted}>

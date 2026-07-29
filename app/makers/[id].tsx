@@ -27,6 +27,7 @@ export default function MakerDetailScreen() {
   const [maker, setMaker] = useState<MakerResult | null>(null);
   const [error, setError] = useState('');
   const [waitlisted, setWaitlisted] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
 
   useEffect(() => {
     if (!token || !id) return;
@@ -44,6 +45,20 @@ export default function MakerDetailScreen() {
       setError('');
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Could not join the waitlist.');
+    }
+  };
+
+  const startChat = async () => {
+    if (!token || !id) return;
+    setStartingChat(true);
+    try {
+      const { conversation } = await api.directConversation(token, id);
+      setError('');
+      router.push({ pathname: '/messages/[id]', params: { id: conversation.id } });
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not start this conversation.');
+    } finally {
+      setStartingChat(false);
     }
   };
 
@@ -120,25 +135,33 @@ export default function MakerDetailScreen() {
         </View>
       </Card>
       {user?.role === 'commissioner' ? (
-        profile.queueOpen ? (
+        <>
+          {profile.queueOpen ? (
+            <Button
+              label="Request a commission"
+              onPress={() =>
+                router.push({
+                  pathname: '/request/[makerId]',
+                  params: { makerId: maker.user.id },
+                })
+              }
+              icon="sparkles-outline"
+            />
+          ) : (
+            <Button
+              disabled={waitlisted}
+              label={waitlisted ? 'You are on the waitlist' : 'Join the waitlist'}
+              onPress={() => void joinWaitlist()}
+              variant="secondary"
+            />
+          )}
           <Button
-            label="Request a commission"
-            onPress={() =>
-              router.push({
-                pathname: '/request/[makerId]',
-                params: { makerId: maker.user.id },
-              })
-            }
-            icon="sparkles-outline"
-          />
-        ) : (
-          <Button
-            disabled={waitlisted}
-            label={waitlisted ? 'You are on the waitlist' : 'Join the waitlist'}
-            onPress={() => void joinWaitlist()}
+            disabled={startingChat}
+            label={startingChat ? 'Opening conversation…' : 'Message maker'}
+            onPress={() => void startChat()}
             variant="secondary"
           />
-        )
+        </>
       ) : null}
       <SectionTitle>Reviews</SectionTitle>
       {maker.reviews.length === 0 ? (

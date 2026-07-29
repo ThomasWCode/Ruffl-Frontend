@@ -149,7 +149,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
       loading,
       warning,
       restriction,
-      signIn: async (email, password) => finishAuthentication(await api.login(email, password)),
+      signIn: async (email, password) => {
+        const result = await api.login(email, password);
+        if (result.user.role === 'admin') {
+          throw new ApiError(
+            'Admin accounts must use the Ruffl admin dashboard.',
+            'ADMIN_DASHBOARD_REQUIRED',
+            403,
+          );
+        }
+        await finishAuthentication(result);
+      },
       signUp: async (input) => finishAuthentication(await api.signup(input)),
       signOut: clearSession,
       dismissWarning,
