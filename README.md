@@ -1,62 +1,192 @@
 # Ruffl mobile app
 
-Ruffl is an Expo/React Native mobile app for iOS and Android. The codebase is TypeScript with Expo Router, which keeps navigation and business-facing screens consistent across both platforms.
+Ruffl is the iOS and Android application used by commissioners and makers. This repository contains only the mobile client. It connects to the separate `Ruffl-Backend` repository for accounts, maker profiles, commissions, messages, warnings, and disputes.
 
-## Why this stack
+This guide assumes you have not used React Native, Expo, or a mobile emulator before.
 
-- One maintainable codebase for iOS and Android
-- Fast physical-device testing through Expo Go during early development
-- A clear path to production development builds when native notification, monitoring, and upload integrations are enabled
-- Strict TypeScript plus separately testable domain helpers
-- Secure device storage for the bearer token through Expo SecureStore
+## Technology in plain English
 
-## Install packages
+- **React Native** lets the project build Android and iOS interfaces from one codebase.
+- **Expo** supplies the development server and mobile tooling around React Native.
+- **Expo Go** is a phone app that can open Ruffl during early development without creating an app-store build.
+- **Expo Router** turns files under `app/` into screens and navigation routes.
+- **TypeScript** is JavaScript with additional checks that catch many mistakes before the app runs.
+- **npm** downloads the libraries listed in `package.json` and runs the commands under `scripts`.
+- **Environment variables** are local settings, such as the backend address, which should not be hard-coded into the application.
 
-Requirements:
+## Repository structure
 
-- Node.js 20.19 or newer; Node 22 LTS is recommended
-- npm
-- Expo Go on an Android or iOS phone for the quickest local test
+```text
+Ruffl-Frontend/
+|-- app/                 Screens and navigation routes
+|-- src/api/             Backend request client
+|-- src/components/      Shared interface components
+|-- src/context/         Login session and live account-status checks
+|-- src/lib/             Calculations and display helpers
+|-- src/theme.ts         Colours and shared visual values
+|-- test/                Automated tests
+|-- app.json             Expo application configuration
+|-- .env.example         Example local settings
+`-- package.json         Libraries and development commands
+```
+
+## Before the first run
+
+Install the following:
+
+1. **Node.js 22 LTS** from [nodejs.org](https://nodejs.org/). npm is installed with Node.js.
+2. **Expo Go** from the iOS App Store or Google Play if you want to test on a physical phone.
+3. A code editor such as [Visual Studio Code](https://code.visualstudio.com/).
+4. The `Ruffl-Backend` repository beside this repository.
+
+After installing Node.js, open PowerShell and confirm it works:
+
+```powershell
+node --version
+npm --version
+```
+
+If either command is not recognised, close and reopen PowerShell. If it still fails, reinstall Node.js and allow its installer to add Node to `PATH`.
+
+## First-time setup
+
+Open PowerShell and move into this repository:
+
+```powershell
+cd C:\Users\thoma\Documents\Ruffl\Ruffl-Frontend
+```
+
+Install the packages:
 
 ```powershell
 npm install
 ```
 
-## Test the app on a physical phone
+`npm install` reads `package.json`, downloads the required libraries into `node_modules`, and creates or updates `package-lock.json`. Run it again whenever `package.json` changes or after pulling dependency changes from Git.
 
-1. Start `Ruffl-Backend` with `npm run dev`.
-2. Find the development computer's LAN IPv4 address with `ipconfig`.
-3. Copy `.env.example` to `.env`.
-4. Replace `localhost` in `EXPO_PUBLIC_API_URL` with that LAN address, for example `http://192.168.1.20:3000`.
-5. Make sure the phone and computer are on the same network.
-6. Start Expo:
+Create your local environment file:
 
 ```powershell
+Copy-Item .env.example .env
+```
+
+The `.env` file is ignored by Git. Do not commit it.
+
+## Configure the backend address
+
+Open `.env` and set `EXPO_PUBLIC_API_URL`.
+
+### Physical phone
+
+`localhost` on a phone means the phone itself, not the development computer. Use the computer's local network address instead.
+
+1. In PowerShell, run:
+
+   ```powershell
+   ipconfig
+   ```
+
+2. Find the active Wi-Fi or Ethernet adapter.
+3. Find its **IPv4 Address**, for example `192.168.1.238`.
+4. Set `.env` to:
+
+   ```dotenv
+   EXPO_PUBLIC_API_URL=http://192.168.1.238:3000
+   ```
+
+5. Make sure the computer and phone are connected to the same home or office network.
+
+### Android Emulator
+
+The standard Android Emulator reaches the Windows host through `10.0.2.2`:
+
+```dotenv
+EXPO_PUBLIC_API_URL=http://10.0.2.2:3000
+```
+
+### iOS Simulator
+
+The iOS Simulator normally reaches the host through `localhost`:
+
+```dotenv
+EXPO_PUBLIC_API_URL=http://localhost:3000
+```
+
+The iOS Simulator requires macOS and Xcode. It cannot run natively on Windows.
+
+## Start Ruffl for the first time
+
+Ruffl needs two terminals: one for the backend and one for the mobile app.
+
+### Terminal 1: start the backend
+
+```powershell
+cd C:\Users\thoma\Documents\Ruffl\Ruffl-Backend
+npm run dev
+```
+
+Leave this terminal open. The backend should report that it is listening on port `3000`.
+
+### Terminal 2: start Expo
+
+```powershell
+cd C:\Users\thoma\Documents\Ruffl\Ruffl-Frontend
 npm start
 ```
 
-7. Scan the QR code with Expo Go.
-8. Tap **Commissioner** or **Maker** on the demo sign-in panel.
+Leave this terminal open too. Expo prints a QR code.
 
-For local Expo Go testing this project intentionally targets Expo SDK 54. The current Expo documentation identifies SDK 54 as the compatible physical-device path during the SDK 57 transition.
+### Open the app on a phone
 
-## Test with an emulator
+1. Open Expo Go.
+2. Scan the QR code from the Expo terminal.
+3. Wait for the JavaScript bundle to finish loading.
+4. On the Ruffl sign-in screen, choose a demo role.
 
-Start the backend and Expo, then:
+Demo accounts:
 
-```powershell
-npm run android
-```
+| Role | Email | Password |
+|---|---|---|
+| Commissioner | `commissioner@demo.ruffl` | `RufflDemo1!` |
+| Maker | `maker@demo.ruffl` | `RufflDemo1!` |
 
-Android Emulator commonly reaches the host at `http://10.0.2.2:3000`; set that as `EXPO_PUBLIC_API_URL`. iOS Simulator can normally use `http://localhost:3000`:
+The buttons on the login screen enter these values automatically.
 
-```powershell
-npm run ios
-```
+## What normal development looks like
 
-The iOS Simulator requires macOS/Xcode. Android Studio is required for the Android emulator.
+1. Start the backend with `npm run dev`.
+2. Start Expo with `npm start`.
+3. Edit files in `app/` or `src/`.
+4. Save the file.
+5. Expo normally refreshes the app automatically.
+6. Watch both terminals for errors.
+7. Run the validation commands before committing.
+
+Useful Expo terminal keys include:
+
+- Press `r` to reload the app.
+- Press `a` to open Android when an emulator is installed.
+- Press `w` to open the browser version.
+- Press `Ctrl+C` to stop Expo.
+
+If `.env` changes, stop Expo with `Ctrl+C` and start it again. A normal hot reload may not reload environment variables.
+
+## Available npm commands
+
+| Command | Purpose |
+|---|---|
+| `npm start` | Starts the Expo development server and prints a QR code |
+| `npm run android` | Starts Expo and attempts to open an Android emulator/device |
+| `npm run ios` | Starts Expo and attempts to open the iOS Simulator |
+| `npm run web` | Runs the web-compatible version for quick layout checks |
+| `npm run typecheck` | Checks TypeScript without creating a build |
+| `npm run lint` | Checks code style and common programming mistakes |
+| `npm test` | Runs the automated tests once |
+| `npm run test:watch` | Keeps tests running and reruns them after changes |
 
 ## Automated validation
+
+Run these before committing:
 
 ```powershell
 npm run typecheck
@@ -64,36 +194,128 @@ npm run lint
 npm test
 ```
 
-Tests cover price/deposit/payout calculations, progress percentage, and user-facing lifecycle labels. API permission and lifecycle tests live in `Ruffl-Backend`.
+The mobile tests cover calculations, progress display, API errors, rate-limit messages, and account restriction propagation. Backend permissions and commission lifecycle tests live in `Ruffl-Backend`.
 
-## Available product flows
+## Live warnings, suspension, and deletion
 
-- Commissioner and maker signup/login with one-tap local demo accounts
-- Role-aware home summaries and activity
-- Maker search, queue status, pricing, profiles, reviews, and waitlist joining
-- Structured commission requests and price negotiation
-- Explicitly simulated deposit and milestone releases
-- Ordered milestone updates and approvals
-- Shipping, receipt confirmation, review, and dispute entry points
-- One inbox over commission/direct/dispute/support conversation types
-- Maker-local price/payout calculator
-- Warning and suspension-aware session handling
+- The app checks the current account with the backend every three seconds.
+- It checks again whenever the app returns from the background.
+- A warning appears as a global dialog, regardless of the current screen.
+- Selecting **I understand** marks the warning as read on the backend.
+- Suspension, soft deletion, and permanent deletion clear the local authenticated session and force the dedicated account-status screen.
+- The backend also rejects every authenticated action immediately, so the three-second client check is not the security boundary.
 
-## Production development builds
+The interface update is not literally instantaneous. Its normal maximum delay is approximately three seconds. True real-time delivery would require WebSockets or push-notification handling.
 
-Expo Go is appropriate for the current integration-light development phase. Before app-store testing, install the Expo development client and create development builds:
+## Product flows currently available
+
+- Commissioner and maker signup/login
+- Role-aware home summaries
+- Maker search, profiles, pricing, queue state, reviews, and waitlists
+- Structured commission requests
+- Price negotiation
+- Simulated deposits and milestone releases
+- Ordered progress updates and approvals
+- Shipping and receipt confirmation
+- Reviews and dispute entry points
+- Commission, direct, dispute, and support conversation types
+- Maker price and payout calculator
+- Warning, suspension, and deletion handling
+
+No real payment is taken. Every payment-related action is symbolic.
+
+## Troubleshooting
+
+### “Could not connect to Ruffl” or “Network request failed”
+
+Check all of the following:
+
+- The backend terminal is still running.
+- The backend uses port `3000`.
+- `EXPO_PUBLIC_API_URL` contains the computer's IPv4 address, not `localhost`, when using a phone.
+- The phone and computer are on the same network.
+- The IP address has not changed since `.env` was created.
+- Windows Firewall is not blocking Node.js on private networks.
+- Expo was restarted after editing `.env`.
+
+Test the backend from the computer:
+
+```powershell
+Invoke-RestMethod http://localhost:3000/health
+```
+
+Expected result:
+
+```text
+status service
+------ -------
+ok     ruffl-api
+```
+
+### The QR code opens but Ruffl never loads
+
+1. Stop Expo with `Ctrl+C`.
+2. Restart with a cleared Metro cache:
+
+   ```powershell
+   npx expo start --clear
+   ```
+
+3. Reopen Expo Go and scan the new QR code.
+
+### Login reports too many attempts
+
+`POST /auth/login` allows ten attempts from one IP address within fifteen minutes. Successful and unsuccessful attempts both count. Wait for the displayed time or restart the development backend to clear its in-memory limiter.
+
+### Account warnings or suspension do not update
+
+- Confirm the mobile app is connected to the same backend instance as the admin dashboard.
+- Check `EXPO_PUBLIC_API_URL`.
+- Leave the app open for at least three seconds.
+- Background and foreground the app to trigger an immediate check.
+- Inspect the backend terminal for `GET /me`.
+
+### Expo reports incompatible packages
+
+Run:
+
+```powershell
+npx expo install --check
+```
+
+Use `npx expo install <package-name>` for Expo-native packages because Expo chooses a compatible version.
+
+## Expo Go versus a development build
+
+Expo Go is the easiest first development environment, but it only contains a fixed set of native libraries. A **development build** is a custom version of the Ruffl app containing its own native libraries. Use development builds before adding full native push notifications, monitoring, or app-store testing.
+
+Install the development client:
 
 ```powershell
 npx expo install expo-dev-client
+```
+
+Configure Expo Application Services:
+
+```powershell
 npx eas-cli@latest build:configure
+```
+
+Create development builds:
+
+```powershell
 npx eas-cli@latest build --profile development --platform android
 npx eas-cli@latest build --profile development --platform ios
 ```
 
-EAS requires an Expo account. A macOS build machine is not required when using EAS cloud builds, but Apple Developer and Google Play accounts are required for store distribution.
+EAS requires an Expo account. Apple Developer and Google Play accounts are required for store distribution.
 
-## Known boundary
+## Security and current limitations
 
-Media picking/upload UI, native Expo Push registration, and Sentry initialization need the real service credentials and production development builds. The backend already defines the relevant data and upload-slot boundaries. All money actions are deliberately labelled simulated because there is no payment processor.
+- Authentication tokens are stored through Expo SecureStore.
+- Never place private server keys in `EXPO_PUBLIC_*` variables. Anything beginning with `EXPO_PUBLIC_` is included in the client application.
+- Media selection/upload UI, Expo Push registration, and Sentry initialisation still require production service integration.
+- The backend currently stores development data in memory, so restarting it resets accounts and commissions.
+- No payment processor is integrated.
 
-As of 26 July 2026, `npm audit --omit=dev` reports high-severity advisories in transitive Expo/React Native build-tool dependencies (`brace-expansion` and `postcss`) with no compatible fix published for the SDK 54 tree. The backend and admin production dependency audits are clean. Do not run `npm audit fix --force` blindly because it can move native packages outside Expo's supported version set; reassess the advisories when moving from Expo Go to a production development build.
+As of 26 July 2026, `npm audit --omit=dev` reports high-severity advisories in transitive Expo/React Native build-tool dependencies (`brace-expansion` and `postcss`) with no compatible fix published for the SDK 54 dependency tree. Do not run `npm audit fix --force` blindly because that can move native packages outside Expo's supported versions.
