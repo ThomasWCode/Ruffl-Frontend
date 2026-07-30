@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as Sentry from '@sentry/react-native';
 import {
   createContext,
   type PropsWithChildren,
@@ -10,8 +10,22 @@ import {
 } from 'react';
 import { AppState } from 'react-native';
 
-import { api, ApiError, setAccountRestrictionHandler } from '../api/client';
+import {
+  api,
+  ApiError,
+  type VerificationRequired,
+  setAccountRestrictionHandler,
+} from '../api/client';
 import type { User } from '../types';
+import {
+  currentPushToken,
+  disablePushNotifications,
+} from '../services/push-notifications';
+import {
+  deleteDeviceValue,
+  getDeviceValue,
+  setDeviceValue,
+} from '../services/device-storage';
 
 const tokenKey = 'ruffl-session-token';
 
@@ -27,8 +41,9 @@ interface SessionValue {
     password: string;
     displayName: string;
     role: 'commissioner' | 'maker';
-  }) => Promise<void>;
+  }) => Promise<VerificationRequired | null>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   dismissWarning: () => Promise<void>;
   dismissRestriction: () => void;
   refresh: () => Promise<void>;
@@ -42,9 +57,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [warning, setWarning] = useState<{ id: string; message: string } | null>(null);
   const [restriction, setRestriction] = useState<{ code: string; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const userId = user?.id;
 
   const clearSession = useCallback(async () => {
-    await SecureStore.deleteItemAsync(tokenKey);
+    await deleteDeviceValue(tokenKey);
     setToken(null);
     setUser(null);
     setWarning(null);
@@ -53,11 +69,15 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     setAccountRestrictionHandler((error) => {
-      void SecureStore.deleteItemAsync(tokenKey);
+      void deleteDeviceValue(tokenKey);
       setToken(null);
       setUser(null);
       setWarning(null);
-      setRestriction({ code: error.code, message: error.message });
+      setRestriction(
+        ['ACCOUNT_SUSPENDED', 'ACCOUNT_DELETED'].includes(error.code)
+          ? { code: error.code, message: error.message }
+          : null,
+      );
     });
     return () => setAccountRestrictionHandler(null);
   }, []);
@@ -69,12 +89,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setUser(result.user);
       setWarning(result.warnings[0] ?? null);
     } catch (error) {
-      if (error instanceof ApiError && ['ACCOUNT_SUSPENDED', 'ACCOUNT_DELETED'].includes(error.code)) {
+      if (
+        error instanceof ApiError &&
+        ['ACCOUNT_SUSPENDED', 'ACCOUNT_DELETED'].includes(error.code)
+      ) {
         setRestriction({ code: error.code, message: error.message });
-        await SecureStore.deleteItemAsync(tokenKey);
+        await deleteDeviceValue(tokenKey);
         setToken(null);
         setUser(null);
         setWarning(null);
+      } else if (error instanceof ApiError && error.status === 401) {
+        await clearSession();
       } else if (clearOnFailure) {
         await clearSession();
       }
@@ -82,7 +107,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }, [clearSession]);
 
   const restoreSession = useCallback(async () => {
-    const saved = await SecureStore.getItemAsync(tokenKey);
+    const saved = await getDeviceValue(tokenKey);
     if (saved) {
       await checkSession(saved, true);
     }
@@ -117,8 +142,23 @@ export function SessionProvider({ children }: PropsWithChildren) {
     };
   }, [checkSession, token]);
 
+  useEffect(() => {
+    if (!token || !userId) return;
+    let cancelled = false;
+    void currentPushToken()
+      .then(async (pushToken) => {
+        if (!cancelled && pushToken) {
+          await api.updateMe(token, { pushToken });
+        }
+      })
+      .catch((error) => Sentry.captureException(error));
+    return () => {
+      cancelled = true;
+    };
+  }, [token, userId]);
+
   const finishAuthentication = useCallback(async (result: { token: string; user: User }) => {
-    await SecureStore.setItemAsync(tokenKey, result.token);
+    await setDeviceValue(tokenKey, result.token);
     setToken(result.token);
     setUser(result.user);
     setWarning(null);
@@ -135,12 +175,31 @@ export function SessionProvider({ children }: PropsWithChildren) {
     } catch (error) {
       if (
         !(error instanceof ApiError) ||
-        !['ACCOUNT_SUSPENDED', 'ACCOUNT_DELETED'].includes(error.code)
+        (error.status !== 401 &&
+          !['ACCOUNT_SUSPENDED', 'ACCOUNT_DELETED'].includes(error.code))
       ) {
         setWarning(currentWarning);
       }
     }
   }, [token, warning]);
+
+  const signOut = useCallback(async () => {
+    try {
+      if (token) await api.updateMe(token, { pushToken: '' });
+    } catch (error) {
+      Sentry.captureException(error);
+    } finally {
+      await disablePushNotifications();
+      await clearSession();
+    }
+  }, [clearSession, token]);
+
+  const deleteAccount = useCallback(async () => {
+    if (!token) return;
+    await api.deleteMe(token);
+    await disablePushNotifications();
+    await clearSession();
+  }, [clearSession, token]);
 
   const value = useMemo<SessionValue>(
     () => ({
@@ -160,19 +219,28 @@ export function SessionProvider({ children }: PropsWithChildren) {
         }
         await finishAuthentication(result);
       },
-      signUp: async (input) => finishAuthentication(await api.signup(input)),
-      signOut: clearSession,
+      signUp: async (input) => {
+        const result = await api.signup(input);
+        if ('requiresEmailVerification' in result) {
+          return result;
+        }
+        await finishAuthentication(result);
+        return null;
+      },
+      signOut,
+      deleteAccount,
       dismissWarning,
       dismissRestriction: () => setRestriction(null),
       refresh: restoreSession,
     }),
     [
-      clearSession,
       dismissWarning,
+      deleteAccount,
       finishAuthentication,
       loading,
       restriction,
       restoreSession,
+      signOut,
       token,
       user,
       warning,

@@ -14,18 +14,24 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, ApiError } from '@/src/api/client';
+import {
+  AttachmentList,
+  AttachmentPicker,
+} from '@/src/components/attachments';
 import { ErrorNotice, Loading } from '@/src/components/ui';
 import { useSession } from '@/src/context/session';
 import { colours, radii } from '@/src/theme';
-import type { Message } from '@/src/types';
+import type { MediaAttachment, Message } from '@/src/types';
 
 export default function MessageScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token, user } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
     if (!token || !id) return;
@@ -46,14 +52,18 @@ export default function MessageScreen() {
   }, [load]);
 
   const send = async () => {
-    if (!token || !id || !text.trim()) return;
+    if (!token || !id || (!text.trim() && attachments.length === 0)) return;
+    setSending(true);
     try {
-      const result = await api.sendMessage(token, id, text);
+      const result = await api.sendMessage(token, id, text, attachments);
       setMessages((current) => [...current, result.message]);
       setText('');
+      setAttachments([]);
       setError('');
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Could not send this message.');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -71,7 +81,10 @@ export default function MessageScreen() {
               const mine = message.senderId === user?.id;
               return (
                 <View key={message.id} style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-                  <Text style={[styles.messageText, mine && styles.mineText]}>{message.text}</Text>
+                  {message.text ? (
+                    <Text style={[styles.messageText, mine && styles.mineText]}>{message.text}</Text>
+                  ) : null}
+                  <AttachmentList attachments={message.attachments} />
                   <Text style={[styles.time, mine && styles.mineTime]}>
                     {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Text>
@@ -81,18 +94,39 @@ export default function MessageScreen() {
           </ScrollView>
         )}
         {error ? <View style={styles.error}><ErrorNotice message={error} /></View> : null}
-        <View style={styles.composer}>
-          <TextInput
-            multiline
-            onChangeText={setText}
-            placeholder="Write a message"
-            placeholderTextColor={colours.inkMuted}
-            style={styles.input}
-            value={text}
-          />
-          <Pressable accessibilityLabel="Send message" onPress={() => void send()} style={styles.send}>
-            <Ionicons color={colours.white} name="arrow-up" size={21} />
-          </Pressable>
+        <View style={styles.composerShell}>
+          {token ? (
+            <AttachmentPicker
+              attachments={attachments}
+              disabled={sending}
+              onChange={setAttachments}
+              token={token}
+            />
+          ) : null}
+          <View style={styles.composer}>
+            <TextInput
+              editable={!sending}
+              multiline
+              onChangeText={setText}
+              placeholder="Write a message"
+              placeholderTextColor={colours.inkMuted}
+              style={styles.input}
+              value={text}
+            />
+            <Pressable
+              accessibilityLabel="Send message"
+              disabled={sending || (!text.trim() && attachments.length === 0)}
+              onPress={() => void send()}
+              style={({ pressed }) => [
+                styles.send,
+                (pressed ||
+                  sending ||
+                  (!text.trim() && attachments.length === 0)) &&
+                  styles.sendDisabled,
+              ]}>
+              <Ionicons color={colours.white} name="arrow-up" size={21} />
+            </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -111,14 +145,17 @@ const styles = StyleSheet.create({
   time: { color: colours.inkMuted, fontSize: 10, marginTop: 4 },
   mineTime: { color: '#CFE2D7', textAlign: 'right' },
   error: { paddingHorizontal: 12 },
-  composer: {
-    alignItems: 'flex-end',
+  composerShell: {
     backgroundColor: colours.surface,
     borderTopColor: colours.line,
     borderTopWidth: 1,
+    gap: 8,
+    padding: 11,
+  },
+  composer: {
+    alignItems: 'flex-end',
     flexDirection: 'row',
     gap: 9,
-    padding: 11,
   },
   input: {
     backgroundColor: colours.cream,
@@ -139,4 +176,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 46,
   },
+  sendDisabled: { opacity: 0.5 },
 });

@@ -3,6 +3,7 @@ import type {
   CommissionDetail,
   Conversation,
   MakerResult,
+  MediaAttachment,
   Message,
   Notification,
   User,
@@ -23,6 +24,25 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+export interface VerificationRequired {
+  requiresEmailVerification: true;
+  message: string;
+  developmentVerificationUrl?: string;
+}
+
+export interface AuthenticationResult {
+  token: string;
+  user: User;
+}
+
+export interface UploadSlot {
+  uploadUrl: string;
+  publicUrl: string;
+  expiresInSeconds: number;
+  method: 'PUT';
+  headers: Record<string, string>;
 }
 
 export function setAccountRestrictionHandler(
@@ -53,7 +73,11 @@ async function request<T>(
       payload.code ?? 'REQUEST_FAILED',
       response.status,
     );
-    if (['ACCOUNT_SUSPENDED', 'ACCOUNT_DELETED'].includes(error.code)) {
+    if (
+      token &&
+      (response.status === 401 ||
+        ['ACCOUNT_SUSPENDED', 'ACCOUNT_DELETED'].includes(error.code))
+    ) {
       accountRestrictionHandler?.(error);
     }
     throw error;
@@ -63,7 +87,7 @@ async function request<T>(
 
 export const api = {
   login: (email: string, password: string) =>
-    request<{ token: string; user: User }>('/auth/login', {
+    request<AuthenticationResult>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -73,14 +97,45 @@ export const api = {
     displayName: string;
     role: 'commissioner' | 'maker';
   }) =>
-    request<{ token: string; user: User }>('/auth/signup', {
+    request<AuthenticationResult | VerificationRequired>('/auth/signup', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  resendVerification: (email: string) =>
+    request<{ message: string; developmentVerificationUrl?: string }>(
+      '/auth/resend-verification',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      },
+    ),
+  forgotPassword: (email: string) =>
+    request<{ message: string; developmentResetUrl?: string }>(
+      '/auth/forgot-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      },
+    ),
   me: (token: string) =>
     request<{ user: User; makerProfile: unknown; warnings: { id: string; message: string }[] }>(
       '/me',
       {},
+      token,
+    ),
+  updateMe: (
+    token: string,
+    input: { displayName?: string; bio?: string; avatarUrl?: string; pushToken?: string },
+  ) =>
+    request<{ user: User }>(
+      '/me',
+      { method: 'PATCH', body: JSON.stringify(input) },
+      token,
+    ),
+  deleteMe: (token: string) =>
+    request<{ deleted: true }>(
+      '/me',
+      { method: 'DELETE', body: JSON.stringify({}) },
       token,
     ),
   makers: (token: string, search = '', openOnly = false) =>
@@ -153,10 +208,29 @@ export const api = {
     ),
   messages: (token: string, conversationId: string) =>
     request<{ messages: Message[] }>(`/conversations/${conversationId}/messages`, {}, token),
-  sendMessage: (token: string, conversationId: string, text: string) =>
+  sendMessage: (
+    token: string,
+    conversationId: string,
+    text: string,
+    attachments: MediaAttachment[] = [],
+  ) =>
     request<{ message: Message }>(
       `/conversations/${conversationId}/messages`,
-      { method: 'POST', body: JSON.stringify({ text }) },
+      { method: 'POST', body: JSON.stringify({ text, attachments }) },
+      token,
+    ),
+  uploadSlot: (
+    token: string,
+    input: {
+      fileName: string;
+      contentType: string;
+      size: number;
+      category: 'image' | 'video' | 'document' | 'avatar' | 'banner';
+    },
+  ) =>
+    request<{ slot: UploadSlot }>(
+      '/uploads/slot',
+      { method: 'POST', body: JSON.stringify(input) },
       token,
     ),
   notifications: (token: string) =>

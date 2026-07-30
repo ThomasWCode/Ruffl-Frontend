@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { PropsWithChildren, ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -156,7 +157,24 @@ export function Field({
   );
 }
 
-export function Avatar({ name, size = 48 }: { name: string; size?: number }) {
+export function Avatar({
+  name,
+  size = 48,
+  uri,
+}: {
+  name: string;
+  size?: number;
+  uri?: string;
+}) {
+  if (uri) {
+    return (
+      <Image
+        accessibilityLabel={`${name}'s profile image`}
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+      />
+    );
+  }
   const initials = name
     .split(' ')
     .map((part) => part[0])

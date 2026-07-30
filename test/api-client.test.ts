@@ -53,4 +53,96 @@ describe('API error messages', () => {
       expect.objectContaining({ code: 'ACCOUNT_SUSPENDED' }),
     );
   });
+
+  it('notifies the session layer when a bearer session has expired', async () => {
+    const sessionHandler = vi.fn();
+    setAccountRestrictionHandler(sessionHandler);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: 'UNAUTHENTICATED',
+            message: 'Your session has expired. Sign in again.',
+          }),
+          { status: 401 },
+        ),
+      ),
+    );
+
+    await expect(api.me('expired-token')).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+      status: 401,
+    });
+    expect(sessionHandler).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'UNAUTHENTICATED' }),
+    );
+  });
+
+  it('sends uploaded attachment metadata with a message', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          message: {
+            id: 'message-one',
+            conversationId: 'conversation-one',
+            senderId: 'user-one',
+            text: '',
+            attachments: [
+              {
+                url: 'https://media.example.test/uploads/user-one/image.png',
+                name: 'image.png',
+                contentType: 'image/png',
+              },
+            ],
+            createdAt: '2026-07-29T12:00:00.000Z',
+          },
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const attachments = [
+      {
+        url: 'https://media.example.test/uploads/user-one/image.png',
+        name: 'image.png',
+        contentType: 'image/png',
+      },
+    ];
+
+    await api.sendMessage(
+      'session-token',
+      'conversation-one',
+      '',
+      attachments,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/conversations/conversation-one/messages',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ text: '', attachments }),
+      }),
+    );
+  });
+
+  it('sends an authenticated account-deletion request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ deleted: true }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.deleteMe('session-token');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/me',
+      expect.objectContaining({
+        method: 'DELETE',
+        body: JSON.stringify({}),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer session-token',
+        }),
+      }),
+    );
+  });
 });

@@ -45,6 +45,15 @@
           }
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Ruffl to select photos you choose to share in commissions and messages.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-notifications",
       "@sentry/react-native"
     ],
     "experiments": {

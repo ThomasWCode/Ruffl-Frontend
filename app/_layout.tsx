@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SessionProvider, useSession } from '@/src/context/session';
+import { listenForNotificationResponses } from '@/src/services/push-notifications';
 import { colours } from '@/src/theme';
 
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
@@ -35,6 +36,13 @@ function Navigation() {
   useEffect(() => {
     if (restriction) router.replace('/suspended');
   }, [restriction]);
+
+  useEffect(() => {
+    const subscription = listenForNotificationResponses(() => {
+      router.replace('/(tabs)');
+    });
+    return () => subscription.remove();
+  }, []);
 
   return (
     <>

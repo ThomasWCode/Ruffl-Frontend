@@ -88,7 +88,10 @@ export default function HomeScreen() {
             <Eyebrow>{user?.role === 'maker' ? 'Maker studio' : 'Commission desk'}</Eyebrow>
             <Text style={styles.greeting}>Hi, {user?.displayName.split(' ')[0]}</Text>
           </View>
-          <Avatar name={user?.displayName ?? 'Ruffl'} />
+          <Avatar
+            name={user?.displayName ?? 'Ruffl'}
+            uri={user?.avatarUrl}
+          />
         </View>
         {error ? <ErrorNotice message={error} /> : null}
         <Card tone="moss">

@@ -1,9 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { api, ApiError } from '@/src/api/client';
+import {
+  AttachmentList,
+  AttachmentPicker,
+} from '@/src/components/attachments';
 import {
   Button,
   Card,
@@ -19,13 +23,36 @@ import {
 import { useSession } from '@/src/context/session';
 import { commissionProgress, formatMoney, statusLabel } from '@/src/lib/commission';
 import { colours, radii } from '@/src/theme';
-import type { Commission, CommissionDetail, Milestone } from '@/src/types';
+import type {
+  Commission,
+  CommissionDetail,
+  MediaAttachment,
+  Milestone,
+} from '@/src/types';
 
 function milestoneTone(status: Milestone['status']) {
   if (status === 'complete') return 'positive' as const;
   if (status === 'posted') return 'warning' as const;
   return 'neutral' as const;
 }
+
+type ReviewCategory = 'quality' | 'communication' | 'accuracy' | 'packaging' | 'timeline';
+
+const reviewCategories: [ReviewCategory, string][] = [
+  ['quality', 'Quality'],
+  ['communication', 'Communication'],
+  ['accuracy', 'Brief accuracy'],
+  ['packaging', 'Packaging'],
+  ['timeline', 'Timeline'],
+];
+
+const initialReviewRatings: Record<ReviewCategory, number> = {
+  quality: 5,
+  communication: 5,
+  accuracy: 5,
+  packaging: 5,
+  timeline: 5,
+};
 
 export default function CommissionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,22 +64,30 @@ export default function CommissionDetailScreen() {
   const [note, setNote] = useState('');
   const [tracking, setTracking] = useState('');
   const [updateNotes, setUpdateNotes] = useState('');
+  const [updateAttachments, setUpdateAttachments] = useState<MediaAttachment[]>([]);
   const [disputeText, setDisputeText] = useState('');
+  const [disputeAttachments, setDisputeAttachments] = useState<MediaAttachment[]>([]);
   const [reviewText, setReviewText] = useState('');
+  const [reviewRatings, setReviewRatings] = useState(initialReviewRatings);
   const [showDispute, setShowDispute] = useState(false);
+  const [showCancellation, setShowCancellation] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (quiet = false) => {
     if (!token || !id) return;
     try {
       setDetail(await api.commission(token, id));
-      setError('');
+      if (!quiet) setError('');
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not load this commission.');
+      if (!quiet) {
+        setError(caught instanceof ApiError ? caught.message : 'Could not load this commission.');
+      }
     }
   }, [id, token]);
 
   useEffect(() => {
     void load();
+    const interval = setInterval(() => void load(true), 3_000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const perform = async (action: string, body: Record<string, unknown> = {}) => {
@@ -65,8 +100,11 @@ export default function CommissionDetailScreen() {
       setPrice('');
       setTracking('');
       setDisputeText('');
+      setDisputeAttachments([]);
       setReviewText('');
+      setReviewRatings(initialReviewRatings);
       setShowDispute(false);
+      setShowCancellation(false);
       await load();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'That action could not be completed.');
@@ -86,6 +124,7 @@ export default function CommissionDetailScreen() {
     try {
       await api.milestoneAction(token, id, milestoneId, action, body);
       setUpdateNotes('');
+      setUpdateAttachments([]);
       await load();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'That milestone could not be updated.');
@@ -115,6 +154,7 @@ export default function CommissionDetailScreen() {
   );
   const allMilestonesComplete =
     milestones.length > 0 && milestones.every((milestone) => milestone.status === 'complete');
+  const myReview = detail.reviews.find((review) => review.reviewerId === user?.id);
 
   return (
     <Screen>
@@ -189,11 +229,49 @@ export default function CommissionDetailScreen() {
         onPerformMilestone={performMilestone}
         onPriceChange={setPrice}
         onTrackingChange={setTracking}
+        onUpdateAttachmentsChange={setUpdateAttachments}
         onUpdateNotesChange={setUpdateNotes}
         price={price}
         tracking={tracking}
+        token={token}
+        updateAttachments={updateAttachments}
         updateNotes={updateNotes}
       />
+
+      {['pending', 'negotiating', 'price_proposed', 'accepted'].includes(
+        commission.status,
+      ) ? (
+        <>
+          <SectionTitle>Cancel request</SectionTitle>
+          {showCancellation ? (
+            <Card tone="coral">
+              <Text style={textStyles.label}>Cancel this commission?</Text>
+              <Text style={textStyles.muted}>
+                This closes the request for both people. After a deposit is recorded, cancellation instead requires
+                a dispute and human review.
+              </Text>
+              <Button
+                disabled={busy}
+                label="Keep commission"
+                onPress={() => setShowCancellation(false)}
+                variant="secondary"
+              />
+              <Button
+                disabled={busy}
+                label={busy ? 'Cancelling…' : 'Cancel commission'}
+                onPress={() => void perform('cancel')}
+                variant="danger"
+              />
+            </Card>
+          ) : (
+            <Button
+              label="Cancel this commission"
+              onPress={() => setShowCancellation(true)}
+              variant="ghost"
+            />
+          )}
+        </>
+      ) : null}
 
       <SectionTitle>Build timeline</SectionTitle>
       <View style={styles.timeline}>
@@ -227,6 +305,7 @@ export default function CommissionDetailScreen() {
               {milestone.updates.map((update) => (
                 <View key={update.id} style={styles.update}>
                   <Text style={textStyles.body}>{update.notes}</Text>
+                  <AttachmentList attachments={update.attachments} />
                   <Text style={styles.date}>{new Date(update.createdAt).toLocaleDateString()}</Text>
                 </View>
               ))}
@@ -255,34 +334,79 @@ export default function CommissionDetailScreen() {
         </>
       ) : null}
 
-      {commission.status === 'complete' && isCommissioner ? (
+      {commission.status === 'complete' && (isCommissioner || isMaker) && !myReview ? (
         <>
           <SectionTitle>Leave a review</SectionTitle>
           <Card>
             <Text style={textStyles.muted}>
-              This compact form applies five stars to each category. Category controls can be expanded later.
+              Rate each part of the completed commission from one to five.
             </Text>
+            {reviewCategories.map(([key, label]) => (
+              <View key={key} style={styles.ratingRow}>
+                <Text style={[textStyles.label, styles.flex]}>{label}</Text>
+                <View style={styles.ratingChoices}>
+                  {[1, 2, 3, 4, 5].map((rating) => (
+                    <Pressable
+                      accessibilityLabel={`${label}: ${rating} out of 5`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: reviewRatings[key] === rating }}
+                      key={rating}
+                      onPress={() =>
+                        setReviewRatings((current) => ({ ...current, [key]: rating }))
+                      }
+                      style={[
+                        styles.ratingChoice,
+                        reviewRatings[key] === rating && styles.ratingChoiceSelected,
+                      ]}>
+                      <Text
+                        style={[
+                          styles.ratingChoiceText,
+                          reviewRatings[key] === rating && styles.ratingChoiceTextSelected,
+                        ]}>
+                        {rating}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ))}
             <Field
-              label="Comment"
+              label="Comment (optional)"
               multiline
               onChangeText={setReviewText}
               placeholder="What went well?"
               value={reviewText}
             />
             <Button
-              disabled={busy || !reviewText.trim()}
-              label="Submit five-star review"
+              disabled={busy}
+              label="Submit review"
               onPress={() =>
                 void perform('reviews', {
-                  quality: 5,
-                  communication: 5,
-                  accuracy: 5,
-                  packaging: 5,
-                  timeline: 5,
+                  ...reviewRatings,
                   comment: reviewText,
                 })
               }
             />
+          </Card>
+        </>
+      ) : null}
+      {myReview ? (
+        <>
+          <SectionTitle>Your review</SectionTitle>
+          <Card>
+            <Text style={textStyles.label}>
+              {(
+                (myReview.quality +
+                  myReview.communication +
+                  myReview.accuracy +
+                  myReview.packaging +
+                  myReview.timeline) /
+                5
+              ).toFixed(1)}{' '}
+              out of 5
+            </Text>
+            {myReview.comment ? <Text style={textStyles.body}>{myReview.comment}</Text> : null}
+            <Text style={textStyles.muted}>Submitted review</Text>
           </Card>
         </>
       ) : null}
@@ -303,10 +427,23 @@ export default function CommissionDetailScreen() {
                 placeholder="Include dates, promises, and the outcome you need"
                 value={disputeText}
               />
+              {token ? (
+                <AttachmentPicker
+                  attachments={disputeAttachments}
+                  disabled={busy}
+                  onChange={setDisputeAttachments}
+                  token={token}
+                />
+              ) : null}
               <Button
                 disabled={busy || !disputeText.trim()}
                 label="Submit dispute"
-                onPress={() => void perform('disputes', { explanation: disputeText })}
+                onPress={() =>
+                  void perform('disputes', {
+                    explanation: disputeText,
+                    attachments: disputeAttachments,
+                  })
+                }
                 variant="danger"
               />
               <Button label="Keep working" onPress={() => setShowDispute(false)} variant="ghost" />
@@ -336,11 +473,14 @@ interface ActionPanelProps {
   note: string;
   tracking: string;
   updateNotes: string;
+  updateAttachments: MediaAttachment[];
+  token: string | null;
   activeMilestone?: Milestone;
   allMilestonesComplete: boolean;
   onPriceChange: (value: string) => void;
   onNoteChange: (value: string) => void;
   onTrackingChange: (value: string) => void;
+  onUpdateAttachmentsChange: (attachments: MediaAttachment[]) => void;
   onUpdateNotesChange: (value: string) => void;
   onPerform: (action: string, body?: Record<string, unknown>) => Promise<void>;
   onPerformMilestone: (
@@ -364,9 +504,12 @@ function ActionPanel(props: ActionPanelProps) {
     onPerformMilestone,
     onPriceChange,
     onTrackingChange,
+    onUpdateAttachmentsChange,
     onUpdateNotesChange,
     price,
     tracking,
+    token,
+    updateAttachments,
     updateNotes,
   } = props;
 
@@ -430,17 +573,32 @@ function ActionPanel(props: ActionPanelProps) {
       <Card tone="moss">
         <Text style={textStyles.label}>Post progress · {activeMilestone.title}</Text>
         <Field
-          hint="Photo/video attachment upload uses the backend upload-slot flow and can be added next."
+          hint="Explain what changed, then attach any progress photos the commissioner should review."
           label="Update notes"
           multiline
           onChangeText={onUpdateNotesChange}
           placeholder="What changed and what should the commissioner review?"
           value={updateNotes}
         />
+        {token ? (
+          <AttachmentPicker
+            attachments={updateAttachments}
+            disabled={busy}
+            onChange={onUpdateAttachmentsChange}
+            token={token}
+          />
+        ) : null}
         <Button
-          disabled={busy || !updateNotes.trim()}
+          disabled={
+            busy || (!updateNotes.trim() && updateAttachments.length === 0)
+          }
           label="Post for approval"
-          onPress={() => void onPerformMilestone(activeMilestone.id, 'updates', { notes: updateNotes })}
+          onPress={() =>
+            void onPerformMilestone(activeMilestone.id, 'updates', {
+              notes: updateNotes,
+              attachments: updateAttachments,
+            })
+          }
         />
       </Card>
     );
@@ -532,5 +690,22 @@ const styles = StyleSheet.create({
     padding: 11,
   },
   date: { color: colours.inkMuted, fontSize: 10, fontWeight: '700' },
+  ratingRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  ratingChoices: { flexDirection: 'row', gap: 6 },
+  ratingChoice: {
+    alignItems: 'center',
+    borderColor: colours.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  ratingChoiceSelected: {
+    backgroundColor: colours.moss,
+    borderColor: colours.moss,
+  },
+  ratingChoiceText: { color: colours.ink, fontSize: 12, fontWeight: '800' },
+  ratingChoiceTextSelected: { color: colours.white },
   history: { gap: 5, paddingVertical: 5 },
 });

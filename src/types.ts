@@ -66,10 +66,16 @@ export interface Commission {
   updatedAt: string;
 }
 
+export interface MediaAttachment {
+  url: string;
+  name: string;
+  contentType: string;
+}
+
 export interface MilestoneUpdate {
   id: string;
   notes: string;
-  attachments: { url: string; name: string; contentType: string }[];
+  attachments: MediaAttachment[];
   createdAt: string;
 }
 
@@ -99,11 +105,15 @@ export interface CommissionDetail {
     unit: string;
     costPerUnit: number;
   }[];
+  reviews: Review[];
   dispute: null | { id: string; status: string; explanation: string; resolution?: string };
 }
 
 export interface Review {
   id: string;
+  commissionId: string;
+  reviewerId: string;
+  revieweeId: string;
   quality: number;
   communication: number;
   accuracy: number;
@@ -126,7 +136,7 @@ export interface Message {
   conversationId: string;
   senderId: string;
   text: string;
-  attachments: { url: string; name: string; contentType: string }[];
+  attachments: MediaAttachment[];
   createdAt: string;
 }
 

@@ -74,7 +74,11 @@ export default function MakerDetailScreen() {
   return (
     <Screen>
       <View style={styles.identity}>
-        <Avatar name={maker.user.displayName} size={76} />
+        <Avatar
+          name={maker.user.displayName}
+          size={76}
+          uri={maker.user.avatarUrl}
+        />
         <View style={styles.flex}>
           <View style={styles.nameRow}>
             <Title>{maker.user.displayName}</Title>
