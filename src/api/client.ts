@@ -51,26 +51,44 @@ export function setAccountRestrictionHandler(
   accountRestrictionHandler = handler;
 }
 
+function parseJson<T>(text: string): (T & { message?: string; code?: string }) | null {
+  try {
+    return JSON.parse(text) as T & { message?: string; code?: string };
+  } catch {
+    return null;
+  }
+}
+
 // Centralizes auth and error parsing so screens only handle product states.
 async function request<T>(
   path: string,
   options: RequestInit = {},
   token?: string | null,
 ): Promise<T> {
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  const payload = (await response.json()) as T & { message?: string; code?: string };
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}${path}`, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new ApiError(
+      'Could not reach the Ruffl API. Check your connection and try again.',
+      'NETWORK_ERROR',
+      0,
+    );
+  }
+
+  const payload = parseJson<T>(await response.text());
   if (!response.ok) {
     const error = new ApiError(
-      payload.message ?? 'The request failed.',
-      payload.code ?? 'REQUEST_FAILED',
+      payload?.message ?? 'The Ruffl API returned an unexpected response. Please try again.',
+      payload?.code ?? 'REQUEST_FAILED',
       response.status,
     );
     if (
@@ -81,6 +99,13 @@ async function request<T>(
       accountRestrictionHandler?.(error);
     }
     throw error;
+  }
+  if (!payload) {
+    throw new ApiError(
+      'The Ruffl API returned an unexpected response. Please try again.',
+      'INVALID_RESPONSE',
+      response.status,
+    );
   }
   return payload;
 }

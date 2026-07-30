@@ -34,6 +34,34 @@ describe('API error messages', () => {
     });
   });
 
+  it('replaces non-JSON server responses with a readable API error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('<html><body>Gateway error</body></html>', {
+          status: 502,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      ),
+    );
+
+    await expect(api.login('user@example.com', 'Password1!')).rejects.toMatchObject({
+      code: 'REQUEST_FAILED',
+      message: 'The Ruffl API returned an unexpected response. Please try again.',
+      status: 502,
+    });
+  });
+
+  it('replaces fetch failures with a readable network error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(api.login('user@example.com', 'Password1!')).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+      message: 'Could not reach the Ruffl API. Check your connection and try again.',
+      status: 0,
+    });
+  });
+
   it('notifies the session layer when an active token becomes suspended', async () => {
     const restrictionHandler = vi.fn();
     setAccountRestrictionHandler(restrictionHandler);
