@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api, setAccountRestrictionHandler } from '../src/api/client';
 
+const expectedApiUrl = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000').replace(
+  /\/$/,
+  '',
+);
+
 describe('API error messages', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -118,7 +123,7 @@ describe('API error messages', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3000/conversations/conversation-one/messages',
+      `${expectedApiUrl}/conversations/conversation-one/messages`,
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ text: '', attachments }),
@@ -135,7 +140,7 @@ describe('API error messages', () => {
     await api.deleteMe('session-token');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3000/me',
+      `${expectedApiUrl}/me`,
       expect.objectContaining({
         method: 'DELETE',
         body: JSON.stringify({}),
