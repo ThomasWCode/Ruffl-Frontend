@@ -1,13 +1,26 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Sentry from '@sentry/react-native';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SessionProvider, useSession } from '@/src/context/session';
+import { listenForNotificationResponses } from '@/src/services/push-notifications';
 import { colours } from '@/src/theme';
 
-export default function RootLayout() {
+if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+    environment:
+      process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT ??
+      (__DEV__ ? 'development' : 'production'),
+    sendDefaultPii: false,
+    tracesSampleRate: 0.1,
+  });
+}
+
+function RootLayout() {
   return (
     <SessionProvider>
       <Navigation />
@@ -15,12 +28,21 @@ export default function RootLayout() {
   );
 }
 
+export default Sentry.wrap(RootLayout);
+
 function Navigation() {
   const { dismissWarning, restriction, warning } = useSession();
 
   useEffect(() => {
     if (restriction) router.replace('/suspended');
   }, [restriction]);
+
+  useEffect(() => {
+    const subscription = listenForNotificationResponses(() => {
+      router.replace('/(tabs)');
+    });
+    return () => subscription.remove();
+  }, []);
 
   return (
     <>

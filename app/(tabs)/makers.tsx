@@ -92,7 +92,11 @@ export default function MakersScreen() {
               <Pressable>
                 <Card>
                   <View style={styles.makerTop}>
-                    <Avatar name={user.displayName} size={58} />
+                    <Avatar
+                      name={user.displayName}
+                      size={58}
+                      uri={user.avatarUrl}
+                    />
                     <View style={styles.flex}>
                       <View style={styles.nameRow}>
                         <Text style={styles.name}>{user.displayName}</Text>

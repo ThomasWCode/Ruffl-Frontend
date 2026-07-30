@@ -47,6 +47,25 @@ export default function HomeScreen() {
     void load();
   }, [load]);
 
+  const markNotificationRead = async (notification: Notification) => {
+    if (!token || notification.read) return;
+    setNotifications((current) =>
+      current.map((item) =>
+        item.id === notification.id ? { ...item, read: true } : item,
+      ),
+    );
+    try {
+      await api.readNotification(token, notification.id);
+    } catch (caught) {
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id ? { ...item, read: false } : item,
+        ),
+      );
+      setError(caught instanceof ApiError ? caught.message : 'Could not update this activity.');
+    }
+  };
+
   const active = commissions.filter((commission) =>
     ['pending', 'negotiating', 'price_proposed', 'accepted', 'active', 'shipping', 'disputed'].includes(
       commission.status,
@@ -69,7 +88,10 @@ export default function HomeScreen() {
             <Eyebrow>{user?.role === 'maker' ? 'Maker studio' : 'Commission desk'}</Eyebrow>
             <Text style={styles.greeting}>Hi, {user?.displayName.split(' ')[0]}</Text>
           </View>
-          <Avatar name={user?.displayName ?? 'Ruffl'} />
+          <Avatar
+            name={user?.displayName ?? 'Ruffl'}
+            uri={user?.avatarUrl}
+          />
         </View>
         {error ? <ErrorNotice message={error} /> : null}
         <Card tone="moss">
@@ -170,15 +192,22 @@ export default function HomeScreen() {
               .reverse()
               .slice(0, 4)
               .map((notification, index) => (
-                <View
+                <Pressable
                   key={notification.id}
+                  accessibilityRole="button"
+                  onPress={() => void markNotificationRead(notification)}
                   style={[styles.activity, index > 0 && styles.activityBorder]}>
-                  <View style={styles.activityDot} />
+                  <View
+                    style={[
+                      styles.activityDot,
+                      notification.read && styles.activityDotRead,
+                    ]}
+                  />
                   <View style={styles.flex}>
                     <Text style={textStyles.label}>{notification.title}</Text>
                     <Text style={textStyles.muted}>{notification.body}</Text>
                   </View>
-                </View>
+                </Pressable>
               ))
           )}
         </Card>
@@ -220,4 +249,5 @@ const styles = StyleSheet.create({
     marginTop: 6,
     width: 8,
   },
+  activityDotRead: { backgroundColor: colours.line },
 });

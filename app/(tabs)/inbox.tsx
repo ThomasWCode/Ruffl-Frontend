@@ -39,6 +39,8 @@ export default function InboxScreen() {
 
   useEffect(() => {
     void load();
+    const interval = setInterval(() => void load(), 5_000);
+    return () => clearInterval(interval);
   }, [load]);
 
   return (
